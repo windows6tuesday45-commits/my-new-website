@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GoToBrowse</title>
+<style>
+  body { margin:0; font-family: Arial, sans-serif; transition: background 0.5s, color 0.5s; }
+  header { background: #0078d7; color: white; padding: 10px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { margin:0; font-size: 24px; }
+  #tabs { display:flex; background:#eee; padding:5px; overflow-x:auto; align-items:center; }
+  .tab { padding:5px 10px; background:#ccc; margin-right:5px; cursor:pointer; border-radius: 4px; display:flex; align-items:center; }
+  .tab.active { background:#fff; font-weight:bold; }
+  .tab img { width:16px; height:16px; margin-right:5px; }
+  .tab button { margin-left:5px; }
+  #content { width:100%; height:60vh; border:none; }
+  #loadingBar { height:4px; background:limegreen; width:0%; transition: width 0.3s; }
+  #status { padding:5px; font-size:14px; }
+  #settingsPanel { display:none; padding:10px; background:#f0f0f0; border-top:1px solid #ccc; transition: background 0.5s, color 0.5s;}
+  #settingsPanel h2 { margin-top:0; }
+  #settingsPanel label { display:block; margin-top:5px; }
+  #homepage { padding:20px; text-align:center; }
+  #homepage input { width:60%; padding:10px; font-size:16px; }
+  #homepage button { padding:10px 20px; font-size:16px; margin-left:5px; }
+  #controls { padding:10px; }
+  #controls button { padding:5px 10px; margin-right:5px; }
+  #linkBar { padding:10px; }
+  #linkBar button { padding:5px 10px; margin-right:5px; font-weight:bold; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>GoToBrowse</h1>
+  <div>
+    <button onclick="toggleSettings()">Settings</button>
+  </div>
+</header>
+
+<div id="loadingBar"></div>
+<div id="tabs"></div>
+<div id="status">Status: Ready</div>
+
+<div id="controls">
+  <button onclick="refreshTab()">🔄 Refresh</button>
+  <button onclick="addTabFromInput()">➕ New Tab</button>
+</div>
+
+<!-- Link Bar for 4 browsers -->
+<div id="linkBar">
+  <button onclick="openLink('YouTube','https://www.youtube.com/')">YouTube</button>
+  <button onclick="openLink('Google','https://www.google.com/')">Google</button>
+  <button onclick="openLink('GitHub','https://github.com/')">GitHub</button>
+  <button onclick="openLink('Win7Sim','https://win7simu.visnalize.com/?utm_source=pwa')">Win7Sim</button>
+</div>
+
+<div id="homepage">
+  <h2>Welcome to GoToBrowse</h2>
+  <input type="text" id="searchBar" placeholder="Enter website URL or name (example.com)" />
+  <button onclick="searchWebsite()">Go</button>
+</div>
+
+<iframe id="content"></iframe>
+
+<div id="settingsPanel">
+  <h2>Settings</h2>
+  <label>Theme:
+    <select id="themeSelect" onchange="changeTheme(this.value)">
+      <option value="light">Light</option>
+      <option value="dark">Dark</option>
+      <option value="sun">Sun</option>
+    </select>
+  </label>
+  <label>Text Size:
+    <select id="textSizeSelect" onchange="changeTextSize(this.value)">
+      <option value="16px">Normal</option>
+      <option value="20px">Large</option>
+      <option value="24px">Extra Large</option>
+    </select>
+  </label>
+  <label>Background Color:
+    <input type="color" id="bgColor" onchange="changeBackgroundColor(this.value)" />
+  </label>
+  <label>
+    <button onclick="checkForUpdates()">Check for Updates</button>
+  </label>
+  <label>
+    <button onclick="runSecurityCheck()">Run Security Check</button>
+  </label>
+</div>
+
+<script>
+let tabs = [];
+let currentTab = 0;
+let badSites = ['badsite.com','malware.com'];
+
+// Predefined link mapping for search bar
+const predefinedLinks = {
+    'youtube': 'https://www.youtube.com/',
+    'google': 'https://www.google.com/',
+    'github': 'https://github.com/',
+    'win7sim': 'https://win7simu.visnalize.com/?utm_source=pwa'
+};
+
+// Load settings from localStorage
+window.onload = function(){
+    const theme = localStorage.getItem('theme') || 'light';
+    const textSize = localStorage.getItem('textSize') || '16px';
+    const bgColor = localStorage.getItem('bgColor') || '#ffffff';
+    document.getElementById('themeSelect').value = theme;
+    document.getElementById('textSizeSelect').value = textSize;
+    document.getElementById('bgColor').value = bgColor;
+    changeTheme(theme);
+    changeTextSize(textSize);
+    changeBackgroundColor(bgColor);
+}
+
+// Homepage search
+function searchWebsite(){
+    let input = document.getElementById('searchBar').value.trim().toLowerCase();
+    if(!input) return;
+
+    // Check if input matches predefined links
+    let url = input;
+    if(predefinedLinks[input]) url = predefinedLinks[input];
+    else if(!url.startsWith('http')) url = 'https://'+url;
+
+    addTab(input, url);
+}
+
+// Open a predefined link in a new tab
+function openLink(name, url){
+    addTab(name, url);
+}
+
+// Add new tab from input
+function addTabFromInput(){
+    const urlInput = prompt('Enter website URL to open:');
+    if(!urlInput) return;
+    let url = urlInput.startsWith('http') ? urlInput : 'https://'+urlInput;
+    addTab(urlInput, url);
+}
+
+// Tabs
+function addTab(name, url) {
+    const tabId = tabs.length;
+    tabs.push({name, url});
+    const tabDiv = document.createElement('div');
+    tabDiv.className = 'tab';
+    tabDiv.id = 'tab-'+tabId;
+    tabDiv.innerHTML = `<img src="https://www.google.com/s2/favicons?domain=${url}" /> ${name} <button onclick="closeTab(${tabId})">x</button>`;
+    tabDiv.onclick = () => switchTab(tabId);
+    document.getElementById('tabs').appendChild(tabDiv);
+    switchTab(tabId);
+    document.getElementById('homepage').style.display='none';
+}
+
+function switchTab(id) {
+    currentTab = id;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('tab-'+id).classList.add('active');
+    loadURL(tabs[id].url);
+}
+
+function closeTab(id) {
+    tabs.splice(id,1);
+    const tabElem = document.getElementById('tab-'+id);
+    tabElem.remove();
+    const allTabs = document.querySelectorAll('.tab');
+    allTabs.forEach((t,i)=>{
+        t.id = 'tab-'+i;
+        t.onclick = ()=>switchTab(i);
+        const btn = t.querySelector('button');
+        btn.onclick = (e)=>{
+            e.stopPropagation();
+            closeTab(i);
+        }
+    });
+    if(tabs.length>0) switchTab(0);
+    else document.getElementById('content').src = ''; 
+}
+
+// Load URL with connection and security checks
+function loadURL(url){
+    const iframe = document.getElementById('content');
+    const bar = document.getElementById('loadingBar');
+    bar.style.width='0%';
+    let progress = 0;
+    const interval = setInterval(()=>{
+        if(progress>=100) clearInterval(interval);
+        else { progress += Math.random()*20; bar.style.width = Math.min(progress,100)+'%'; }
+    },100);
+
+    // Security check
+    let domain = url.replace('https://','').replace('http://','').split('/')[0];
+    if(badSites.includes(domain)){
+        iframe.srcdoc = `<h2 style="color:red; text-align:center;">Security Warning: ${domain} is a bad website!</h2>`;
+        document.getElementById('status').innerText = 'Status: Security Warning';
+        return;
+    }
+
+    // Internet connection check
+    fetch(url,{mode:'no-cors'})
+    .then(()=>{
+        iframe.src = url; 
+        document.getElementById('status').innerText='Status: Online';
+    })
+    .catch(()=>{
+        iframe.srcdoc = `<h2 style="color:red; text-align:center;">Sorry, cannot load website. No internet connection.</h2>`;
+        document.getElementById('status').innerText='Status: Offline';
+    });
+}
+
+// Refresh current tab
+function refreshTab(){
+    if(tabs.length>0) loadURL(tabs[currentTab].url);
+}
+
+// Theme and text settings
+function changeTheme(theme){
+    localStorage.setItem('theme', theme);
+    if(theme==='light'){ 
+        document.body.style.background='white'; 
+        document.body.style.color='black';
+        document.getElementById('settingsPanel').style.background='#f0f0f0';
+        document.getElementById('settingsPanel').style.color='black';
+    } else if(theme==='dark'){ 
+        document.body.style.background='#1e1e1e'; 
+        document.body.style.color='white'; 
+        document.getElementById('settingsPanel').style.background='#333';
+        document.getElementById('settingsPanel').style.color='white';
+    } else if(theme==='sun'){ 
+        document.body.style.background='gold'; 
+        document.body.style.color='darkblue'; 
+        document.getElementById('settingsPanel').style.background='#ffeb99';
+        document.getElementById('settingsPanel').style.color='darkblue';
+    }
+}
+
+function changeTextSize(size){
+    localStorage.setItem('textSize', size);
+    document.body.style.fontSize=size;
+}
+
+function changeBackgroundColor(color){
+    localStorage.setItem('bgColor', color);
+    document.body.style.background=color;
+}
+
+// Settings panel
+function toggleSettings(){
+    const panel = document.getElementById('settingsPanel');
+    panel.style.display = (panel.style.display==='none') ? 'block' : 'none';
+}
+
+// Simulated update check
+function checkForUpdates(){
+    alert('Checking for updates... GoToBrowse is up-to-date!');
+}
+
+// Security check for all tabs
+function runSecurityCheck(){
+    let message = 'All tabs safe.';
+    tabs.forEach(t=>{
+        let domain = t.url.replace('https://','').replace('http://','').split('/')[0];
+        if(badSites.includes(domain)) message = 'Warning: Bad website detected: '+t.url;
+    });
+    alert(message);
+}
+</script>
+
+</body>
+</html>
